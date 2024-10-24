@@ -22,9 +22,9 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 (THU.CST) os is loading ...
 Special kernel symbols:
   entry  0xffffffffc0200032 (virtual)
-  etext  0xffffffffc02019ae (virtual)
-  edata  0xffffffffc0206010 (virtual)
-  end    0xffffffffc0206470 (virtual)
+  etext  0xffffffffc0201da6 (virtual)
+  edata  0xffffffffc0206028 (virtual)
+  end    0xffffffffc0206488 (virtual)
 Kernel executable memory footprint: 26KB
 memory management: best_fit_pmm_manager
 physcial memory map:
@@ -33,6 +33,43 @@ check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0205000
 satp physical address: 0x0000000080205000
 ++ setup timer interrupts
+slub_init() succeeded!
+SLUB Test Begin
+Initial Free list length: 0
+Required units: 2
+Current block size: 1
+No merge, inserting into the list.
+Inserted block without merging.
+Current block size: 256
+Allocated smaller block, cutting!
+Allocated block1Free list length after allocating block1: 1
+Merge successful! Free list length will decrease by 1.
+Inserted block without merging.
+Freed block1
+Free list length after freeing block1: 1
+Required units: 2
+Current block size: 256
+Allocated smaller block, cutting!
+Allocated block2Free list length after allocating block2: 1
+Required units: 2
+Current block size: 254
+Allocated smaller block, cutting!
+Allocated block3Free list length after allocating block3: 1
+Required units: 17
+Current block size: 252
+Allocated smaller block, cutting!
+Allocated block4Free list length after allocating block4: 1
+No merge, inserting into the list.
+Inserted block without merging.
+Freed block3
+Free list length after freeing block3: 2
+Merge successful! Free list length will decrease by 1.
+Inserted block without merging.
+Merge successful! Free list length will decrease by 1.
+Merge successful with previous block! Free list length will decrease by 1.
+Freed block4
+Free list length after freeing block2&4: 1
+SLUB Test End
 100 ticks
 100 ticks
 100 ticks

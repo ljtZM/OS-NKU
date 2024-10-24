@@ -98,11 +98,11 @@ ffffffffc020006a:	402000ef          	jal	ra,ffffffffc020046c <idt_init>
 ffffffffc020006e:	3a2000ef          	jal	ra,ffffffffc0200410 <clock_init>
     intr_enable();  // enable irq interrupt
 ffffffffc0200072:	3ee000ef          	jal	ra,ffffffffc0200460 <intr_enable>
+    
     slub_init();
 ffffffffc0200076:	5b2010ef          	jal	ra,ffffffffc0201628 <slub_init>
     slub_test();
 ffffffffc020007a:	5ba010ef          	jal	ra,ffffffffc0201634 <slub_test>
-
 
 
     /* do nothing */
@@ -2373,24 +2373,24 @@ static inline bool __intr_save(void) {
 ffffffffc0201216:	100027f3          	csrr	a5,sstatus
 ffffffffc020121a:	8b89                	andi	a5,a5,2
 ffffffffc020121c:	e799                	bnez	a5,ffffffffc020122a <alloc_pages+0x14>
-
-// alloc_pages - call pmm->alloc_pages to allocate a continuous n*PAGESIZE
-// memory
 struct Page *alloc_pages(size_t n) {
     struct Page *page = NULL;
     bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        page = pmm_manager->alloc_pages(n);
 ffffffffc020121e:	00005797          	auipc	a5,0x5
 ffffffffc0201222:	2427b783          	ld	a5,578(a5) # ffffffffc0206460 <pmm_manager>
 ffffffffc0201226:	6f9c                	ld	a5,24(a5)
 ffffffffc0201228:	8782                	jr	a5
-
+struct Page *alloc_pages(size_t n) {
 ffffffffc020122a:	1141                	addi	sp,sp,-16
 ffffffffc020122c:	e406                	sd	ra,8(sp)
 ffffffffc020122e:	e022                	sd	s0,0(sp)
 ffffffffc0201230:	842a                	mv	s0,a0
         intr_disable();
 ffffffffc0201232:	a34ff0ef          	jal	ra,ffffffffc0200466 <intr_disable>
-    bool intr_flag;
+        page = pmm_manager->alloc_pages(n);
 ffffffffc0201236:	00005797          	auipc	a5,0x5
 ffffffffc020123a:	22a7b783          	ld	a5,554(a5) # ffffffffc0206460 <pmm_manager>
 ffffffffc020123e:	6f9c                	ld	a5,24(a5)
@@ -2404,10 +2404,10 @@ static inline void __intr_restore(bool flag) {
     if (flag) {
         intr_enable();
 ffffffffc0201246:	a1aff0ef          	jal	ra,ffffffffc0200460 <intr_enable>
-    local_intr_save(intr_flag);
-    {
-        page = pmm_manager->alloc_pages(n);
     }
+    local_intr_restore(intr_flag);
+    return page;
+}
 ffffffffc020124a:	60a2                	ld	ra,8(sp)
 ffffffffc020124c:	8522                	mv	a0,s0
 ffffffffc020124e:	6402                	ld	s0,0(sp)
@@ -2419,17 +2419,17 @@ ffffffffc0201254 <free_pages>:
 ffffffffc0201254:	100027f3          	csrr	a5,sstatus
 ffffffffc0201258:	8b89                	andi	a5,a5,2
 ffffffffc020125a:	e799                	bnez	a5,ffffffffc0201268 <free_pages+0x14>
-    return page;
-}
-
 // free_pages - call pmm->free_pages to free a continuous n*PAGESIZE memory
 void free_pages(struct Page *base, size_t n) {
     bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        pmm_manager->free_pages(base, n);
 ffffffffc020125c:	00005797          	auipc	a5,0x5
 ffffffffc0201260:	2047b783          	ld	a5,516(a5) # ffffffffc0206460 <pmm_manager>
 ffffffffc0201264:	739c                	ld	a5,32(a5)
 ffffffffc0201266:	8782                	jr	a5
-}
+void free_pages(struct Page *base, size_t n) {
 ffffffffc0201268:	1101                	addi	sp,sp,-32
 ffffffffc020126a:	ec06                	sd	ra,24(sp)
 ffffffffc020126c:	e822                	sd	s0,16(sp)
@@ -2438,16 +2438,16 @@ ffffffffc0201270:	842a                	mv	s0,a0
 ffffffffc0201272:	84ae                	mv	s1,a1
         intr_disable();
 ffffffffc0201274:	9f2ff0ef          	jal	ra,ffffffffc0200466 <intr_disable>
-    bool intr_flag;
+        pmm_manager->free_pages(base, n);
 ffffffffc0201278:	00005797          	auipc	a5,0x5
 ffffffffc020127c:	1e87b783          	ld	a5,488(a5) # ffffffffc0206460 <pmm_manager>
 ffffffffc0201280:	739c                	ld	a5,32(a5)
 ffffffffc0201282:	85a6                	mv	a1,s1
 ffffffffc0201284:	8522                	mv	a0,s0
 ffffffffc0201286:	9782                	jalr	a5
-    local_intr_save(intr_flag);
-    {
-        pmm_manager->free_pages(base, n);
+    }
+    local_intr_restore(intr_flag);
+}
 ffffffffc0201288:	6442                	ld	s0,16(sp)
 ffffffffc020128a:	60e2                	ld	ra,24(sp)
 ffffffffc020128c:	64a2                	ld	s1,8(sp)
@@ -2460,23 +2460,23 @@ ffffffffc0201294 <nr_free_pages>:
 ffffffffc0201294:	100027f3          	csrr	a5,sstatus
 ffffffffc0201298:	8b89                	andi	a5,a5,2
 ffffffffc020129a:	e799                	bnez	a5,ffffffffc02012a8 <nr_free_pages+0x14>
-
-// nr_free_pages - call pmm->nr_free_pages to get the size (nr*PAGESIZE)
-// of current free memory
 size_t nr_free_pages(void) {
     size_t ret;
     bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        ret = pmm_manager->nr_free_pages();
 ffffffffc020129c:	00005797          	auipc	a5,0x5
 ffffffffc02012a0:	1c47b783          	ld	a5,452(a5) # ffffffffc0206460 <pmm_manager>
 ffffffffc02012a4:	779c                	ld	a5,40(a5)
 ffffffffc02012a6:	8782                	jr	a5
-
+size_t nr_free_pages(void) {
 ffffffffc02012a8:	1141                	addi	sp,sp,-16
 ffffffffc02012aa:	e406                	sd	ra,8(sp)
 ffffffffc02012ac:	e022                	sd	s0,0(sp)
         intr_disable();
 ffffffffc02012ae:	9b8ff0ef          	jal	ra,ffffffffc0200466 <intr_disable>
-    bool intr_flag;
+        ret = pmm_manager->nr_free_pages();
 ffffffffc02012b2:	00005797          	auipc	a5,0x5
 ffffffffc02012b6:	1ae7b783          	ld	a5,430(a5) # ffffffffc0206460 <pmm_manager>
 ffffffffc02012ba:	779c                	ld	a5,40(a5)
@@ -2484,10 +2484,10 @@ ffffffffc02012bc:	9782                	jalr	a5
 ffffffffc02012be:	842a                	mv	s0,a0
         intr_enable();
 ffffffffc02012c0:	9a0ff0ef          	jal	ra,ffffffffc0200460 <intr_enable>
-    local_intr_save(intr_flag);
-    {
-        ret = pmm_manager->nr_free_pages();
     }
+    local_intr_restore(intr_flag);
+    return ret;
+}
 ffffffffc02012c4:	60a2                	ld	ra,8(sp)
 ffffffffc02012c6:	8522                	mv	a0,s0
 ffffffffc02012c8:	6402                	ld	s0,0(sp)
@@ -2495,51 +2495,51 @@ ffffffffc02012ca:	0141                	addi	sp,sp,16
 ffffffffc02012cc:	8082                	ret
 
 ffffffffc02012ce <pmm_init>:
-// init_pmm_manager - initialize a pmm_manager instance
+    pmm_manager = &best_fit_pmm_manager;
 ffffffffc02012ce:	00001797          	auipc	a5,0x1
 ffffffffc02012d2:	57278793          	addi	a5,a5,1394 # ffffffffc0202840 <best_fit_pmm_manager>
-static void init_pmm_manager(void) {
+    cprintf("memory management: %s\n", pmm_manager->name);
 ffffffffc02012d6:	638c                	ld	a1,0(a5)
-    mem_begin = ROUNDUP(freemem, PGSIZE);
-    mem_end = ROUNDDOWN(mem_end, PGSIZE);
-    if (freemem < mem_end) {
         init_memmap(pa2page(mem_begin), (mem_end - mem_begin) / PGSIZE);
     }
 }
+
+/* pmm_init - initialize the physical memory management */
+void pmm_init(void) {
 ffffffffc02012d8:	1101                	addi	sp,sp,-32
 ffffffffc02012da:	e426                	sd	s1,8(sp)
-static void init_pmm_manager(void) {
+    cprintf("memory management: %s\n", pmm_manager->name);
 ffffffffc02012dc:	00001517          	auipc	a0,0x1
 ffffffffc02012e0:	59c50513          	addi	a0,a0,1436 # ffffffffc0202878 <best_fit_pmm_manager+0x38>
-// init_pmm_manager - initialize a pmm_manager instance
+    pmm_manager = &best_fit_pmm_manager;
 ffffffffc02012e4:	00005497          	auipc	s1,0x5
 ffffffffc02012e8:	17c48493          	addi	s1,s1,380 # ffffffffc0206460 <pmm_manager>
-}
+void pmm_init(void) {
 ffffffffc02012ec:	ec06                	sd	ra,24(sp)
 ffffffffc02012ee:	e822                	sd	s0,16(sp)
-// init_pmm_manager - initialize a pmm_manager instance
+    pmm_manager = &best_fit_pmm_manager;
 ffffffffc02012f0:	e09c                	sd	a5,0(s1)
-static void init_pmm_manager(void) {
+    cprintf("memory management: %s\n", pmm_manager->name);
 ffffffffc02012f2:	dc9fe0ef          	jal	ra,ffffffffc02000ba <cprintf>
-    pmm_manager = &best_fit_pmm_manager;      //在此更换页面管理函数指针
+    pmm_manager->init();
 ffffffffc02012f6:	609c                	ld	a5,0(s1)
-}
+    va_pa_offset = PHYSICAL_MEMORY_OFFSET;
 ffffffffc02012f8:	00005417          	auipc	s0,0x5
 ffffffffc02012fc:	18040413          	addi	s0,s0,384 # ffffffffc0206478 <va_pa_offset>
-    pmm_manager = &best_fit_pmm_manager;      //在此更换页面管理函数指针
+    pmm_manager->init();
 ffffffffc0201300:	679c                	ld	a5,8(a5)
 ffffffffc0201302:	9782                	jalr	a5
-}
+    va_pa_offset = PHYSICAL_MEMORY_OFFSET;
 ffffffffc0201304:	57f5                	li	a5,-3
 ffffffffc0201306:	07fa                	slli	a5,a5,0x1e
-    uint64_t mem_size = PHYSICAL_MEMORY_END - KERNEL_BEGIN_PADDR;
+    cprintf("physcial memory map:\n");
 ffffffffc0201308:	00001517          	auipc	a0,0x1
 ffffffffc020130c:	58850513          	addi	a0,a0,1416 # ffffffffc0202890 <best_fit_pmm_manager+0x50>
-}
+    va_pa_offset = PHYSICAL_MEMORY_OFFSET;
 ffffffffc0201310:	e01c                	sd	a5,0(s0)
-    uint64_t mem_size = PHYSICAL_MEMORY_END - KERNEL_BEGIN_PADDR;
+    cprintf("physcial memory map:\n");
 ffffffffc0201312:	da9fe0ef          	jal	ra,ffffffffc02000ba <cprintf>
-    uint64_t mem_end = PHYSICAL_MEMORY_END; //硬编码取代 sbi_query_memory()接口
+    cprintf("  memory: 0x%016lx, [0x%016lx, 0x%016lx].\n", mem_size, mem_begin,
 ffffffffc0201316:	46c5                	li	a3,17
 ffffffffc0201318:	06ee                	slli	a3,a3,0x1b
 ffffffffc020131a:	40100613          	li	a2,1025
@@ -2549,40 +2549,40 @@ ffffffffc0201324:	0656                	slli	a2,a2,0x15
 ffffffffc0201326:	00001517          	auipc	a0,0x1
 ffffffffc020132a:	58250513          	addi	a0,a0,1410 # ffffffffc02028a8 <best_fit_pmm_manager+0x68>
 ffffffffc020132e:	d8dfe0ef          	jal	ra,ffffffffc02000ba <cprintf>
-
+    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
 ffffffffc0201332:	777d                	lui	a4,0xfffff
 ffffffffc0201334:	00006797          	auipc	a5,0x6
 ffffffffc0201338:	15378793          	addi	a5,a5,339 # ffffffffc0207487 <end+0xfff>
 ffffffffc020133c:	8ff9                	and	a5,a5,a4
-
+    npage = maxpa / PGSIZE;
 ffffffffc020133e:	00005517          	auipc	a0,0x5
 ffffffffc0201342:	11250513          	addi	a0,a0,274 # ffffffffc0206450 <npage>
 ffffffffc0201346:	00088737          	lui	a4,0x88
-
+    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
 ffffffffc020134a:	00005597          	auipc	a1,0x5
 ffffffffc020134e:	10e58593          	addi	a1,a1,270 # ffffffffc0206458 <pages>
-
+    npage = maxpa / PGSIZE;
 ffffffffc0201352:	e118                	sd	a4,0(a0)
-
+    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
 ffffffffc0201354:	e19c                	sd	a5,0(a1)
 ffffffffc0201356:	4681                	li	a3,0
-    //kernel在end[]结束, pages是剩下的页的开始
+    for (size_t i = 0; i < npage - nbase; i++) {
 ffffffffc0201358:	4701                	li	a4,0
 ffffffffc020135a:	4885                	li	a7,1
 ffffffffc020135c:	fff80837          	lui	a6,0xfff80
 ffffffffc0201360:	a011                	j	ffffffffc0201364 <pmm_init+0x96>
-    pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
+        SetPageReserved(pages + i);
 ffffffffc0201362:	619c                	ld	a5,0(a1)
 ffffffffc0201364:	97b6                	add	a5,a5,a3
 ffffffffc0201366:	07a1                	addi	a5,a5,8
 ffffffffc0201368:	4117b02f          	amoor.d	zero,a7,(a5)
-    //kernel在end[]结束, pages是剩下的页的开始
+    for (size_t i = 0; i < npage - nbase; i++) {
 ffffffffc020136c:	611c                	ld	a5,0(a0)
 ffffffffc020136e:	0705                	addi	a4,a4,1
 ffffffffc0201370:	02868693          	addi	a3,a3,40
 ffffffffc0201374:	01078633          	add	a2,a5,a6
 ffffffffc0201378:	fec765e3          	bltu	a4,a2,ffffffffc0201362 <pmm_init+0x94>
-        SetPageReserved(pages + i);
+    uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * (npage - nbase));
 ffffffffc020137c:	6190                	ld	a2,0(a1)
 ffffffffc020137e:	00279713          	slli	a4,a5,0x2
 ffffffffc0201382:	973e                	add	a4,a4,a5
@@ -2593,51 +2593,51 @@ ffffffffc020138c:	96ba                	add	a3,a3,a4
 ffffffffc020138e:	c0200737          	lui	a4,0xc0200
 ffffffffc0201392:	08e6ef63          	bltu	a3,a4,ffffffffc0201430 <pmm_init+0x162>
 ffffffffc0201396:	6018                	ld	a4,0(s0)
-
+    if (freemem < mem_end) {
 ffffffffc0201398:	45c5                	li	a1,17
 ffffffffc020139a:	05ee                	slli	a1,a1,0x1b
-        SetPageReserved(pages + i);
+    uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * (npage - nbase));
 ffffffffc020139c:	8e99                	sub	a3,a3,a4
-
+    if (freemem < mem_end) {
 ffffffffc020139e:	04b6e863          	bltu	a3,a1,ffffffffc02013ee <pmm_init+0x120>
-    
-
-    extern char boot_page_table_sv39[];
-    satp_virtual = (pte_t*)boot_page_table_sv39;
     satp_physical = PADDR(satp_virtual);
     cprintf("satp virtual address: 0x%016lx\nsatp physical address: 0x%016lx\n", satp_virtual, satp_physical);
+}
+
+static void check_alloc_page(void) {
+    pmm_manager->check();
 ffffffffc02013a2:	609c                	ld	a5,0(s1)
 ffffffffc02013a4:	7b9c                	ld	a5,48(a5)
 ffffffffc02013a6:	9782                	jalr	a5
-}
+    cprintf("check_alloc_page() succeeded!\n");
 ffffffffc02013a8:	00001517          	auipc	a0,0x1
 ffffffffc02013ac:	59850513          	addi	a0,a0,1432 # ffffffffc0202940 <best_fit_pmm_manager+0x100>
 ffffffffc02013b0:	d0bfe0ef          	jal	ra,ffffffffc02000ba <cprintf>
-    check_alloc_page();
+    satp_virtual = (pte_t*)boot_page_table_sv39;
 ffffffffc02013b4:	00004597          	auipc	a1,0x4
 ffffffffc02013b8:	c4c58593          	addi	a1,a1,-948 # ffffffffc0205000 <boot_page_table_sv39>
 ffffffffc02013bc:	00005797          	auipc	a5,0x5
 ffffffffc02013c0:	0ab7ba23          	sd	a1,180(a5) # ffffffffc0206470 <satp_virtual>
-    
+    satp_physical = PADDR(satp_virtual);
 ffffffffc02013c4:	c02007b7          	lui	a5,0xc0200
 ffffffffc02013c8:	08f5e063          	bltu	a1,a5,ffffffffc0201448 <pmm_init+0x17a>
 ffffffffc02013cc:	6010                	ld	a2,0(s0)
-    extern char boot_page_table_sv39[];
+}
 ffffffffc02013ce:	6442                	ld	s0,16(sp)
 ffffffffc02013d0:	60e2                	ld	ra,24(sp)
 ffffffffc02013d2:	64a2                	ld	s1,8(sp)
-    
+    satp_physical = PADDR(satp_virtual);
 ffffffffc02013d4:	40c58633          	sub	a2,a1,a2
 ffffffffc02013d8:	00005797          	auipc	a5,0x5
 ffffffffc02013dc:	08c7b823          	sd	a2,144(a5) # ffffffffc0206468 <satp_physical>
-
+    cprintf("satp virtual address: 0x%016lx\nsatp physical address: 0x%016lx\n", satp_virtual, satp_physical);
 ffffffffc02013e0:	00001517          	auipc	a0,0x1
 ffffffffc02013e4:	58050513          	addi	a0,a0,1408 # ffffffffc0202960 <best_fit_pmm_manager+0x120>
-    extern char boot_page_table_sv39[];
+}
 ffffffffc02013e8:	6105                	addi	sp,sp,32
-
+    cprintf("satp virtual address: 0x%016lx\nsatp physical address: 0x%016lx\n", satp_virtual, satp_physical);
 ffffffffc02013ea:	cd1fe06f          	j	ffffffffc02000ba <cprintf>
-
+    mem_begin = ROUNDUP(freemem, PGSIZE);
 ffffffffc02013ee:	6705                	lui	a4,0x1
 ffffffffc02013f0:	177d                	addi	a4,a4,-1
 ffffffffc02013f2:	96ba                	add	a3,a3,a4
@@ -2651,7 +2651,7 @@ static inline struct Page *pa2page(uintptr_t pa) {
     if (PPN(pa) >= npage) {
 ffffffffc02013f8:	00c6d513          	srli	a0,a3,0xc
 ffffffffc02013fc:	00f57e63          	bgeu	a0,a5,ffffffffc0201418 <pmm_init+0x14a>
-
+    pmm_manager->init_memmap(base, n);
 ffffffffc0201400:	609c                	ld	a5,0(s1)
         panic("pa2page called with invalid pa");
     }
@@ -2660,14 +2660,14 @@ ffffffffc0201402:	982a                	add	a6,a6,a0
 ffffffffc0201404:	00281513          	slli	a0,a6,0x2
 ffffffffc0201408:	9542                	add	a0,a0,a6
 ffffffffc020140a:	6b9c                	ld	a5,16(a5)
-    mem_begin = ROUNDUP(freemem, PGSIZE);
+        init_memmap(pa2page(mem_begin), (mem_end - mem_begin) / PGSIZE);
 ffffffffc020140c:	8d95                	sub	a1,a1,a3
 ffffffffc020140e:	050e                	slli	a0,a0,0x3
-
+    pmm_manager->init_memmap(base, n);
 ffffffffc0201410:	81b1                	srli	a1,a1,0xc
 ffffffffc0201412:	9532                	add	a0,a0,a2
 ffffffffc0201414:	9782                	jalr	a5
-// init_memmap - call pmm->init_memmap to build Page struct for free memory
+}
 ffffffffc0201416:	b771                	j	ffffffffc02013a2 <pmm_init+0xd4>
         panic("pa2page called with invalid pa");
 ffffffffc0201418:	00001617          	auipc	a2,0x1
@@ -2676,18 +2676,18 @@ ffffffffc0201420:	06b00593          	li	a1,107
 ffffffffc0201424:	00001517          	auipc	a0,0x1
 ffffffffc0201428:	50c50513          	addi	a0,a0,1292 # ffffffffc0202930 <best_fit_pmm_manager+0xf0>
 ffffffffc020142c:	f89fe0ef          	jal	ra,ffffffffc02003b4 <__panic>
-        SetPageReserved(pages + i);
+    uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * (npage - nbase));
 ffffffffc0201430:	00001617          	auipc	a2,0x1
 ffffffffc0201434:	4a860613          	addi	a2,a2,1192 # ffffffffc02028d8 <best_fit_pmm_manager+0x98>
-ffffffffc0201438:	06e00593          	li	a1,110
+ffffffffc0201438:	07000593          	li	a1,112
 ffffffffc020143c:	00001517          	auipc	a0,0x1
 ffffffffc0201440:	4c450513          	addi	a0,a0,1220 # ffffffffc0202900 <best_fit_pmm_manager+0xc0>
 ffffffffc0201444:	f71fe0ef          	jal	ra,ffffffffc02003b4 <__panic>
-    
+    satp_physical = PADDR(satp_virtual);
 ffffffffc0201448:	86ae                	mv	a3,a1
 ffffffffc020144a:	00001617          	auipc	a2,0x1
 ffffffffc020144e:	48e60613          	addi	a2,a2,1166 # ffffffffc02028d8 <best_fit_pmm_manager+0x98>
-ffffffffc0201452:	08900593          	li	a1,137
+ffffffffc0201452:	08b00593          	li	a1,139
 ffffffffc0201456:	00001517          	auipc	a0,0x1
 ffffffffc020145a:	4aa50513          	addi	a0,a0,1194 # ffffffffc0202900 <best_fit_pmm_manager+0xc0>
 ffffffffc020145e:	f57fe0ef          	jal	ra,ffffffffc02003b4 <__panic>
