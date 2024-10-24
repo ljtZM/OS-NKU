@@ -362,7 +362,8 @@ static void basic_buddy_check(void) {
     free_pages(p1, 2);
     free_pages(p2, 1);
     display_buddy_structure();
-}```
+}
+```
 ### 5. 结果展示
 从输出结果来看，我们使用了一系列的分配和释放操作，配合 `check_alloc_page()` 函数中的分配和释放测试，展示了 Buddy System 内存分配器的正确性。
 #### 初始状态：分配 p0 前
@@ -625,7 +626,8 @@ void *slub_alloc(size_t size) {
 
     free_small_block(big_block, sizeof(big_block_t)); // 释放失败的块
     return NULL;
-}```
+}
+```
 1. **小块请求处理**: 当请求的大小小于页面大小减去小块头部大小时，调用`allocate_small_block`进行小块分配。
 2. **大块请求处理**: 对于大块请求，首先分配一个`big_block_t`结构，以管理大块的元数据，然后计算所需的页面数量并调用`alloc_pages`获取实际的内存块。
 3. **管理链表**: 如果成功获取内存页，则将其添加到大块链表中，确保大块的管理，同时返回指向分配内存块的指针。 
