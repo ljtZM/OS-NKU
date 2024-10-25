@@ -5,7 +5,7 @@
 
 /* In the first fit algorithm, the allocator keeps a list of free blocks (known as the free list) and,
    on receiving a request for memory, scans along the list for the first block that is large enough to
-   satisfy the request. If the chosen block is significantly larger than that requested, then it is 
+   satisfy the request. If the chosen block is significantly larger than that requested, then it is
    usually split, and the remainder added to the list as another free block.
    Please see Page 196~198, Section 8.2 of Yan Wei Min's chinese book "Data Structure -- C programming language"
 */
@@ -58,17 +58,20 @@ static free_area_t free_area;
 #define free_list (free_area.free_list)
 #define nr_free (free_area.nr_free)
 
-static void
-default_init(void) {
+//初始化空闲链表free_list,将空闲块数量nr_free设置为0
+//list相关函数在libs/list.h
+static void default_init(void) {
     list_init(&free_list);
     nr_free = 0;
 }
 
-static void
-default_init_memmap(struct Page *base, size_t n) {
-    assert(n > 0);
-    struct Page *p = base;
-    for (; p != base + n; p ++) {
+//初始化一个大小为n的空闲内存块，并将其加入到空闲链表中
+//struct Page from libs/atomic.h
+//le2page 
+static void default_init_memmap(struct Page* base, size_t n) {
+    assert(n > 0);//请求的页面数量n大于0
+    struct Page* p = base;
+    for (; p != base + n; p++) {//重置每一页
         assert(PageReserved(p));
         p->flags = p->property = 0;
         set_page_ref(p, 0);
@@ -77,31 +80,33 @@ default_init_memmap(struct Page *base, size_t n) {
     SetPageProperty(base);
     nr_free += n;
     if (list_empty(&free_list)) {
-        list_add(&free_list, &(base->page_link));
-    } else {
+        list_add(&free_list, &(base->page_link));//链表为空，直接加
+    }
+    else {
         list_entry_t* le = &free_list;
         while ((le = list_next(le)) != &free_list) {
-            struct Page* page = le2page(le, page_link);
-            if (base < page) {
+            struct Page* page = le2page(le, page_link);//有点像类型转换
+            if (base < page) {//比的是地址
                 list_add_before(le, &(base->page_link));
                 break;
-            } else if (list_next(le) == &free_list) {
+            }
+            else if (list_next(le) == &free_list) {
                 list_add(le, &(base->page_link));
             }
         }
     }
 }
 
-static struct Page *
-default_alloc_pages(size_t n) {
-    assert(n > 0);
-    if (n > nr_free) {
+//在空闲链表中查找第一个足够大的空闲块，并分配n个页面
+static struct Page* default_alloc_pages(size_t n) {
+    assert(n > 0);//请求的页面数量n大于0，
+    if (n > nr_free) {//检查是否有足够的空闲页面
         return NULL;
     }
-    struct Page *page = NULL;
-    list_entry_t *le = &free_list;
+    struct Page* page = NULL;
+    list_entry_t* le = &free_list;
     while ((le = list_next(le)) != &free_list) {
-        struct Page *p = le2page(le, page_link);
+        struct Page* p = le2page(le, page_link);
         if (p->property >= n) {
             page = p;
             break;
@@ -111,7 +116,7 @@ default_alloc_pages(size_t n) {
         list_entry_t* prev = list_prev(&(page->page_link));
         list_del(&(page->page_link));
         if (page->property > n) {
-            struct Page *p = page + n;
+            struct Page* p = page + n;
             p->property = page->property - n;
             SetPageProperty(p);
             list_add(prev, &(p->page_link));
@@ -122,11 +127,11 @@ default_alloc_pages(size_t n) {
     return page;
 }
 
-static void
-default_free_pages(struct Page *base, size_t n) {
-    assert(n > 0);
-    struct Page *p = base;
-    for (; p != base + n; p ++) {
+//释放内存并将其重新插入到空闲链表中，同时尝试合并相邻的空闲块
+static void default_free_pages(struct Page* base, size_t n) {
+    assert(n > 0);//请求的页面数量n大于0
+    struct Page* p = base;
+    for (; p != base + n; p++) {//重置每一页
         assert(!PageReserved(p) && !PageProperty(p));
         p->flags = 0;
         set_page_ref(p, 0);
@@ -135,25 +140,27 @@ default_free_pages(struct Page *base, size_t n) {
     SetPageProperty(base);
     nr_free += n;
 
-    if (list_empty(&free_list)) {
+    if (list_empty(&free_list)) {//链表为空，直接加
         list_add(&free_list, &(base->page_link));
-    } else {
+    }
+    else {
         list_entry_t* le = &free_list;
         while ((le = list_next(le)) != &free_list) {
             struct Page* page = le2page(le, page_link);
             if (base < page) {
-                list_add_before(le, &(base->page_link));
+                list_add_before(le, &(base->page_link));//加到地址合适的位置
                 break;
-            } else if (list_next(le) == &free_list) {
+            }
+            else if (list_next(le) == &free_list) {//加到最后
                 list_add(le, &(base->page_link));
             }
         }
     }
 
-    list_entry_t* le = list_prev(&(base->page_link));
-    if (le != &free_list) {
+    list_entry_t* le = list_prev(&(base->page_link));//检查上一个块
+    if (le != &free_list) {//链表不为空
         p = le2page(le, page_link);
-        if (p + p->property == base) {
+        if (p + p->property == base) {//判断相邻
             p->property += base->property;
             ClearPageProperty(base);
             list_del(&(base->page_link));
@@ -161,10 +168,10 @@ default_free_pages(struct Page *base, size_t n) {
         }
     }
 
-    le = list_next(&(base->page_link));
-    if (le != &free_list) {
+    le = list_next(&(base->page_link));//检查下一个块
+    if (le != &free_list) {//链表不为空
         p = le2page(le, page_link);
-        if (base + base->property == p) {
+        if (base + base->property == p) {//判断相邻
             base->property += p->property;
             ClearPageProperty(p);
             list_del(&(p->page_link));
@@ -172,16 +179,16 @@ default_free_pages(struct Page *base, size_t n) {
     }
 }
 
-static size_t
-default_nr_free_pages(void) {
+//返回当前空闲页面的总数
+static size_t default_nr_free_pages(void) {
     return nr_free;
 }
 
-static void
-basic_check(void) {
-    struct Page *p0, *p1, *p2;
+//基本检查以验证内存管理器的正确
+static void basic_check(void) {
+    struct Page* p0, * p1, * p2;
     p0 = p1 = p2 = NULL;
-    assert((p0 = alloc_page()) != NULL);
+    assert((p0 = alloc_page()) != NULL);//分配三个页面
     assert((p1 = alloc_page()) != NULL);
     assert((p2 = alloc_page()) != NULL);
 
@@ -201,7 +208,7 @@ basic_check(void) {
 
     assert(alloc_page() == NULL);
 
-    free_page(p0);
+    free_page(p0);//释放
     free_page(p1);
     free_page(p2);
     assert(nr_free == 3);
@@ -215,7 +222,7 @@ basic_check(void) {
     free_page(p0);
     assert(!list_empty(&free_list));
 
-    struct Page *p;
+    struct Page* p;
     assert((p = alloc_page()) == p0);
     assert(alloc_page() == NULL);
 
@@ -230,32 +237,32 @@ basic_check(void) {
 
 // LAB2: below code is used to check the first fit allocation algorithm
 // NOTICE: You SHOULD NOT CHANGE basic_check, default_check functions!
-static void
-default_check(void) {
+//更复杂的测试
+static void default_check(void) {
     int count = 0, total = 0;
-    list_entry_t *le = &free_list;
+    list_entry_t* le = &free_list;
     while ((le = list_next(le)) != &free_list) {
-        struct Page *p = le2page(le, page_link);
+        struct Page* p = le2page(le, page_link);
         assert(PageProperty(p));
-        count ++, total += p->property;
+        count++, total += p->property;
     }
-    assert(total == nr_free_pages());
+    assert(total == nr_free_pages());//统计总空闲页数，确保它与实际的nr_free_pages一致
 
-    basic_check();
+    basic_check();//function above
 
-    struct Page *p0 = alloc_pages(5), *p1, *p2;
+    struct Page* p0 = alloc_pages(5), * p1, * p2;
     assert(p0 != NULL);
     assert(!PageProperty(p0));
 
     list_entry_t free_list_store = free_list;
     list_init(&free_list);
-    assert(list_empty(&free_list));
+    assert(list_empty(&free_list));//验证初始化函数分配的链表为空
     assert(alloc_page() == NULL);
 
     unsigned int nr_free_store = nr_free;
     nr_free = 0;
 
-    free_pages(p0 + 2, 3);
+    free_pages(p0 + 2, 3);//从第3页开始释放内存，加入链表
     assert(alloc_pages(4) == NULL);
     assert(PageProperty(p0 + 2) && p0[2].property == 3);
     assert((p1 = alloc_pages(3)) != NULL);
@@ -286,8 +293,8 @@ default_check(void) {
 
     le = &free_list;
     while ((le = list_next(le)) != &free_list) {
-        struct Page *p = le2page(le, page_link);
-        count --, total -= p->property;
+        struct Page* p = le2page(le, page_link);
+        count--, total -= p->property;
     }
     assert(count == 0);
     assert(total == 0);
