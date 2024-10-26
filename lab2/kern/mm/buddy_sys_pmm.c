@@ -4,245 +4,204 @@
 #include <pmm.h>
 #include <stdio.h>
 
-// 全局变量，包含了伙伴系统的相关信息
-free_buddy_t buddy_sys_data;
+buddy_system_free_t free_buddy; // 定义一个 `buddy_system_free_t` 类型的结构体实例，用于管理伙伴系统的空闲内存块
 
-// 宏定义，用于简化访问 buddy_sys_data 中的字段
-#define free_blocks (buddy_sys_data.free_array) // 空闲链表数组，存储不同大小的空闲块
-#define total_free (buddy_sys_data.nr_free) // 空闲页的总数
-#define max_level (buddy_sys_data.order) // 最大阶数
-#define is_power_of_two(n) (!((n)&((n)-1))) // 判断是否为2的幂次方
+#define free_block_lists (free_buddy.free_block_lists) // 访问 `free_buddy` 中的 `free_block_lists` 数组
+#define depth (free_buddy.depth) // 访问 `free_buddy` 中的 `depth` 表示二叉树深度
+#define free_blocks_count (free_buddy.free_blocks_count) // 访问 `free_buddy` 中的 `free_blocks_count` 表示空闲块的总数
+extern ppn_t fppn; // 定义起始物理页号 `fppn`，用作物理页分配的基准
 
-// 计算一个数的对数（以2为底），用于确定分配的阶数
-static uint32_t calc_log2(size_t n)
-{
-    uint32_t level = 0;
-    while (n > 1)
-    {
-        level++;
+// 判断x是否为2的幂
+#define IS_POWER_OF_2(n) (!((n) & ((n) - 1)))
+
+// 获取 n 向下的 2 的幂次
+static uint32_t GET_POWER_OF_2(size_t n) {
+    uint32_t power = 0;
+    while (n >> 1) { // 当 `n` 右移一位时不为0
         n >>= 1;
+        power++; // 每次右移表示 `power` 加1
     }
-    return level;
+    return power; // 返回 2 的幂次值
 }
 
-// 将给定的值向下取整为最近的2的幂次方
-static size_t round_down_to_power_of_two(size_t n)
-{
-    size_t rounded = 1;
-    while (n > 1)
-    {
-        rounded <<= 1;
-        n >>= 1;
+// 获取指定页面的伙伴块
+static struct Page* GET_BUDDY(struct Page *page) {
+    uint32_t power = page->property; // 获取页面的 `property`（当前块的 2 的幂次）
+    size_t ppn = fppn + ((1 << power) ^ (page2ppn(page) - fppn)); // 计算伙伴块的物理页号，使用异或
+    return page + (ppn - page2ppn(page)); // 根据 `ppn` 返回伙伴块页面地址
+}
+
+// 初始化空闲链表数组
+static void buddy_initialize(void) {
+    for (int i = 0; i < 15; i++) { // 初始化 0~14 层
+        list_init(free_block_lists + i); // 对 `free_block_lists` 中的每一层进行初始化
     }
-    return rounded;
+    depth = 0; // 初始深度设为 0
+    free_blocks_count = 0; // 初始空闲块总数设为 0
+    return;
 }
 
-// 将给定的值向上取整为最近的2的幂次方
-static size_t round_up_to_power_of_two(size_t n)
-{
-    size_t down = round_down_to_power_of_two(n);
-    return (n == down) ? down : (down << 1);
-}
-
-// 获取页面在物理页数组中的索引
-static inline uint32_t get_page_index(struct Page *page)
-{
-    return page - pages;
-}
-    
-// 初始化伙伴系统，将所有空闲链表置为空
-static void buddy_sys_initialize()
-{
-    max_level = 0; // 初始最大阶数设为0
-    total_free = 0; // 初始空闲页数设为0
-    for (int i = 0; i < MAX_ORDER; ++i)
-        list_init(free_blocks + i); // 初始化每个阶数的空闲链表
-}
-
-// 初始化伙伴系统的内存管理，将系统的所有内存块分配到相应的阶数链表中
-static void buddy_sys_memmap_init(struct Page *base, size_t n)
-{
-    assert(n > 0);
-    size_t managed_pages = round_down_to_power_of_two(n); // 向下取整为2的幂次方
-    max_level = calc_log2(managed_pages); // 计算对应的阶数
-
-    // 初始化内存块，将每页的状态和属性清零
-    for (struct Page *p = base; p != base + managed_pages; ++p)
-    {
-        assert(PageReserved(p)); // 确保页是保留状态
-        p->flags = 0;       // 清空标志位
-        p->property = 0;    // 设置为无管理的页
-        set_page_ref(p, 0); // 引用计数清零
+// 初始化物理页
+static void buddy_initialize_memory(struct Page *base, size_t real_n) {
+    assert(real_n > 0); // 确保 `real_n` 大于 0
+    struct Page *p = base;
+    depth = GET_POWER_OF_2(real_n); // 设置二叉树深度
+    size_t n = 1 << depth; // 根据深度计算出可用页面总数
+    free_blocks_count = n; // 初始化空闲块总数
+    for (; p != base + n; p += 1) { // 遍历每个物理页
+        assert(PageReserved(p)); // 确保每个页面保留
+        p->flags = 0; // 将页面标记为空闲
+        p->property = 0; // 设置页面大小为2^0 = 1
+        set_page_ref(p, 0); // 设置页面引用计数为 0
     }
-
-    total_free = managed_pages; // 更新空闲页数
-    base->property = max_level; // 设置内存块的阶数
-    SetPageProperty(base);      // 将页面设置为伙伴系统头页
-    list_add(&(free_blocks[max_level]), &(base->page_link));  // 将块加入相应的空闲链表
+    list_add(&(free_block_lists[depth]), &(base->page_link)); // 将整个空闲块加入到对应层的空闲链表
+    base->property = depth; // 设置页面的属性为深度
+    return;
 }
 
-// 拆分较大的块为较小的块，直到满足请求的大小
-static void buddy_split_block(size_t level)
-{
-    assert(level > 0 && level <= max_level); // 确保阶数有效
+// 分配一个内存块
+static struct Page * allocate_buddy_pages(size_t real_n) {
+    assert(real_n > 0); // 确保请求的块大小大于 0
+    if (real_n > free_blocks_count) return NULL; // 若请求大小大于可用空闲块，返回 NULL
+    struct Page *page = NULL;
+    depth = IS_POWER_OF_2(real_n) ? GET_POWER_OF_2(real_n) : GET_POWER_OF_2(real_n) + 1; // 计算分配块的深度
+    size_t n = 1 << depth; // 计算所需的页面数
 
-    // 如果该阶数没有空闲块，继续向上层拆分
-    if (list_empty(&(free_blocks[level])))   
-        buddy_split_block(level + 1);
-    
-    // 获取空闲块并将其拆分为两个较小的块
-    struct Page *left_block = le2page(list_next(&(free_blocks[level])), page_link);
-    left_block->property -= 1; // 更新左块的阶数
-    struct Page *right_block = left_block + (1 << (left_block->property)); // 计算右块的地址
-    SetPageProperty(right_block); // 标记右块为头页
-    right_block->property = left_block->property; // 设置右块的阶数
-
-    // 将原来的块从链表中移除，加入到下一级的空闲链表中
-    list_del(list_next(&(free_blocks[level])));
-    list_add(&(free_blocks[level - 1]), &(left_block->page_link));
-    list_add(&(left_block->page_link), &(right_block->page_link));
-}
-
-// 分配 n 页内存
-static struct Page* buddy_sys_alloc_pages(size_t n)
-{
-    assert(n > 0);
-    if (n > total_free) return NULL; // 如果没有足够的空闲页，则返回 NULL
-
-    size_t required_pages = round_up_to_power_of_two(n); // 将需求向上取整为2的幂
-    uint32_t level = calc_log2(required_pages); // 计算对应的阶数
-
-    // 如果相应阶数没有空闲块，则拆分更高阶的块
-    if (list_empty(&(free_blocks[level])))
-        buddy_split_block(level + 1);
-
-    // 分配块并更新空闲页数
-    struct Page *allocated_page = le2page(list_next(&(free_blocks[level])), page_link);
-    list_del(list_next(&(free_blocks[level])));
-
-    ClearPageProperty(allocated_page); // 清除块的属性
-    total_free -= required_pages; // 更新空闲页数
-    return allocated_page;
-}
-
-// 根据给定页面找到其伙伴块的地址
-static struct Page* find_buddy(struct Page *page)
-{
-    uint32_t level = page->property; // 获取块的阶数
-    uint32_t buddy_idx = get_page_index(page) ^ (1 << level); // 通过异或操作计算伙伴块的索引
-    return pages + buddy_idx; // 返回伙伴块的地址
-}
-
-// 释放 n 页内存并尝试与伙伴块合并
-static void buddy_sys_free_pages(struct Page *base, size_t n)
-{
-    assert(n > 0);
-    uint32_t level = base->property; // 获取释放块的阶数
-    size_t required_pages = (1 << level); // 计算所释放的页数
-    assert(required_pages == round_up_to_power_of_two(n)); // 确保释放页数符合2的幂次方
-
-    struct Page* left_block = base;
-    list_add(&(free_blocks[level]), &(left_block->page_link)); // 将块重新加入空闲链表
-
-    // 查找伙伴块并尝试合并
-    struct Page* buddy = find_buddy(left_block);
-    while (left_block->property < max_level && PageProperty(buddy)) // 如果伙伴块空闲，则合并
-    {
-        if (left_block > buddy) // 确保较小的块在左边
-        {
-            struct Page* temp = left_block;
-            left_block = buddy;
-            buddy = temp;
+    while (1) {
+        if (!list_empty(&(free_block_lists[depth]))) { // 当前层有空闲块
+            page = le2page(list_next(&(free_block_lists[depth])), page_link); // 获取空闲块页面
+            list_del(list_next(&(free_block_lists[depth]))); // 将该空闲块从链表中删除
+            SetPageProperty(page); // 设置页面为已用
+            free_blocks_count -= n; // 更新空闲块数量
+            break;
         }
-
-        list_del(&(left_block->page_link)); // 从链表中删除已释放的块
-        list_del(&(buddy->page_link));
-        left_block->property += 1; // 更新块的阶数
-        buddy->property = 0;
-        SetPageProperty(left_block); // 设置合并后的块为头页
-        ClearPageProperty(buddy); // 清除伙伴块的属性
-    }
-
-    total_free += required_pages; // 更新空闲页数
-}
-
-// 返回当前系统中的空闲页数
-static size_t buddy_sys_free_pages_count()
-{
-    return total_free;
-}
-
-// 显示当前的空闲链表结构，便于调试和观察内存分配情况
-static void display_buddy_structure(void) {
-    cprintf("当前空闲的链表数组:\n");
-    for (int i = 0; i < MAX_ORDER; i++) {
-        if (!list_empty(&(free_blocks[i]))) {
-            cprintf("No.%d的空闲链表有", i);
-            list_entry_t *le = &(free_blocks[i]);
-            while ((le = list_next(le)) != &(free_blocks[i])) {
-                struct Page *p = le2page(le, page_link);
-                cprintf("%lu页 [地址为%p] ", (1UL << i), page2pa(p)); // 打印页大小和物理地址
+        for (int i = depth; i < 15; i++) { // 否则从更高层分割空闲块
+            if (!list_empty(&(free_block_lists[i]))) { // 检查高层是否有空闲块
+                struct Page *page1 = le2page(list_next(&(free_block_lists[i])), page_link);
+                struct Page *page2 = page1 + (1 << (i - 1)); // 分割出两个块
+                page1->property = i - 1; // 更新分块后的属性
+                page2->property = i - 1;
+                list_del(list_next(&(free_block_lists[i]))); // 删除原块
+                list_add(&(free_block_lists[i - 1]), &(page2->page_link)); // 添加分割后的两个块
+                list_add(&(free_block_lists[i - 1]), &(page1->page_link));
+                break;
             }
-            cprintf("\n");
         }
     }
+    return page; // 返回分配的内存块
 }
 
-// 基本的测试函数，验证内存分配和释放是否正常工作
-static void basic_buddy_check(void) {
+// 释放内存块
+static void release_buddy_pages(struct Page *base, size_t n) {
+    assert(n > 0); // 确保释放的块大小大于 0
+    free_blocks_count += 1 << base->property; // 更新空闲块总数
+    struct Page *free_page = base;
+    struct Page *free_page_buddy = GET_BUDDY(free_page); // 获取伙伴块
+    list_add(&(free_block_lists[free_page->property]), &(free_page->page_link)); // 将块加入空闲链表
+
+    while (!PageProperty(free_page_buddy) && free_page->property < 14) { // 当伙伴块未使用且深度<14
+        if (free_page_buddy < free_page) { // 如果释放块在右边，交换
+            struct Page *temp;
+            free_page->property = 0;
+            ClearPageProperty(free_page);
+            temp = free_page;
+            free_page = free_page_buddy;
+            free_page_buddy = temp;
+        }
+        list_del(&(free_page->page_link)); // 从链表中移除块
+        list_del(&(free_page_buddy->page_link));
+        free_page->property += 1; // 合并后属性增加
+        list_add(&(free_block_lists[free_page->property]), &(free_page->page_link)); // 将合并后的块加入空闲链表
+        free_page_buddy = GET_BUDDY(free_page); // 更新伙伴块
+    }
+    ClearPageProperty(free_page); // 清除页面属性
+    return;
+}
+
+// 获取空闲块数量
+static size_t buddy_free_block_count(void) {
+    return free_blocks_count;
+}
+
+// 展示空闲链表数组
+static void SHOW_FREE_BLOCKS(void) {
+    cprintf("显示空闲链表数组:\n");
+    for (int i = 0; i < 15; i++) {
+        cprintf("NO. %d 层: ", i);
+        list_entry_t *le = &(free_block_lists[i]);
+        while ((le = list_next(le)) != &(free_block_lists[i])) { // 遍历当前层空闲链表
+            struct Page *p = le2page(le, page_link);
+            cprintf("%d ", 1 << (p->property)); // 显示页面块大小
+        }
+        cprintf("\n");
+    }
+    return;
+}
+
+// 基本功能检查
+static void basic_check(void) {
     struct Page *p0, *p1, *p2;
     p0 = p1 = p2 = NULL;
-    
-    // 分配并显示当前空闲链表
     assert((p0 = alloc_page()) != NULL);
-    cprintf("分配p0:\n");
-    display_buddy_structure();
-    
     assert((p1 = alloc_page()) != NULL);
-    cprintf("分配p0,p1:\n");
-    display_buddy_structure();
-    
     assert((p2 = alloc_page()) != NULL);
-    
-    // 确保分配的页面不同，且引用计数为0
     assert(p0 != p1 && p0 != p2 && p1 != p2);
     assert(page_ref(p0) == 0 && page_ref(p1) == 0 && page_ref(p2) == 0);
+    assert(page2pa(p0) < npage * PGSIZE);
+    assert(page2pa(p1) < npage * PGSIZE);
+    assert(page2pa(p2) < npage * PGSIZE);
+    cprintf("P0,P1,P2_SINGLE PAGES(WITH ORDER):\n");
+    SHOW_FREE_BLOCKS(); // 显示空闲块信息
 
-    // 显示分配后的空闲链表
-    cprintf("分配p0, p1, p2之后:\n");
-    display_buddy_structure();
-
-    // 释放并显示当前空闲链表
-    free_page(p0);
+    free_page(p0); // 释放页面
     free_page(p1);
     free_page(p2);
-    cprintf("释放 p2 之后:\n");
-    display_buddy_structure();
+    cprintf("FREE_P0,P1,P2:\n");
+    SHOW_FREE_BLOCKS(); // 显示释放后的空闲块信息
+    assert(free_blocks_count == 16384);
     
-    // 验证空闲页数
-    assert(total_free == 16384);
-    
-    // 再次分配和释放
+    assert((p0 = alloc_pages(3)) != NULL);
+    assert((p1 = alloc_pages(3)) != NULL);
+    cprintf("P0,P1_3 PAGES:\n");
+    SHOW_FREE_BLOCKS(); // 显示分配 3 页后的空闲块信息
+    free_pages(p0, 3);
+    free_pages(p1, 3);
+    cprintf("FREE_P0,P1:\n");
+    SHOW_FREE_BLOCKS(); // 显示释放后的空闲块信息
+
     assert((p0 = alloc_pages(4)) != NULL);
+    cprintf("ALLOC_P0_4 PAGES:\n");
+    SHOW_FREE_BLOCKS(); // 显示分配 4 页后的空闲块信息
     assert((p1 = alloc_pages(2)) != NULL);
+    cprintf("ALLOC_P1_2 PAGES:\n");
+    SHOW_FREE_BLOCKS(); // 显示分配 2 页后的空闲块信息
     assert((p2 = alloc_pages(1)) != NULL);
-
-    cprintf("再次分配 p0, p1, p2\n");
-
+    cprintf("ALLOC_P1_1 PAGE:\n");
+    SHOW_FREE_BLOCKS(); // 显示分配 1 页后的空闲块信息
     free_pages(p0, 4);
     free_pages(p1, 2);
     free_pages(p2, 1);
+    cprintf("FREE:\n");
+    SHOW_FREE_BLOCKS(); // 显示释放后的空闲块信息
 
-    cprintf("确保没有空闲页,释放 p0, p1, p2\n");
+    assert((p0 = alloc_pages(16385)) == NULL);
+    assert((p0 = alloc_pages(16384)) != NULL);
+    free_pages(p0, 16384); // 释放所有页面
 }
 
-// 定义伙伴系统的内存管理接口
+// 检查功能
+static void buddy_check(void) {
+    SHOW_FREE_BLOCKS(); // 显示空闲块信息
+    basic_check(); // 运行基本检查功能
+}
+
 const struct pmm_manager buddy_pmm_manager = {
     .name = "buddy_pmm_manager",
-    .init = buddy_sys_initialize, // 初始化
-    .init_memmap = buddy_sys_memmap_init, // 内存初始化
-    .alloc_pages = buddy_sys_alloc_pages, // 分配内存
-    .free_pages = buddy_sys_free_pages, // 释放内存
-    .nr_free_pages = buddy_sys_free_pages_count, // 获取空闲页数
-    .check = basic_buddy_check, // 测试函数
+    .init = buddy_initialize,
+    .init_memmap = buddy_initialize_memory,
+    .alloc_pages = allocate_buddy_pages,
+    .free_pages = release_buddy_pages,
+    .nr_free_pages = buddy_free_block_count,
+    .check = buddy_check,
 };
+

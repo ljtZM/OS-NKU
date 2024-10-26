@@ -1,0 +1,192 @@
+pp@pp-virtual-machine:~/lab2$ make qemu
+
+OpenSBI v0.4 (Jul  2 2019 11:53:53)
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+Platform Name          : QEMU Virt Machine
+Platform HART Features : RV64ACDFIMSU
+Platform Max HARTs     : 8
+Current Hart           : 0
+Firmware Base          : 0x80000000
+Firmware Size          : 112 KB
+Runtime SBI Version    : 0.1
+
+PMP0: 0x0000000080000000-0x000000008001ffff (A)
+PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
+(THU.CST) os is loading ...
+Special kernel symbols:
+  entry  0xffffffffc0200032 (virtual)
+  etext  0xffffffffc02017f8 (virtual)
+  edata  0xffffffffc0206010 (virtual)
+  end    0xffffffffc0206560 (virtual)
+Kernel executable memory footprint: 26KB
+memory management: buddy_pmm_manager
+physcial memory map:
+  memory: 0x0000000007e00000, [0x0000000080200000, 0x0000000087ffffff].
+显示空闲链表数组:
+NO. 0 层: 
+NO. 1 层: 
+NO. 2 层: 
+NO. 3 层: 
+NO. 4 层: 
+NO. 5 层: 
+NO. 6 层: 
+NO. 7 层: 
+NO. 8 层: 
+NO. 9 层: 
+NO. 10 层: 
+NO. 11 层: 
+NO. 12 层: 
+NO. 13 层: 
+NO. 14 层: 16384 
+P0,P1,P2_SINGLE PAGES(WITH ORDER):
+显示空闲链表数组:
+NO. 0 层: 1 
+NO. 1 层: 
+NO. 2 层: 4 
+NO. 3 层: 8 
+NO. 4 层: 16 
+NO. 5 层: 32 
+NO. 6 层: 64 
+NO. 7 层: 128 
+NO. 8 层: 256 
+NO. 9 层: 512 
+NO. 10 层: 1024 
+NO. 11 层: 2048 
+NO. 12 层: 4096 
+NO. 13 层: 8192 
+NO. 14 层: 
+FREE_P0,P1,P2:
+显示空闲链表数组:
+NO. 0 层: 
+NO. 1 层: 
+NO. 2 层: 
+NO. 3 层: 
+NO. 4 层: 
+NO. 5 层: 
+NO. 6 层: 
+NO. 7 层: 
+NO. 8 层: 
+NO. 9 层: 
+NO. 10 层: 
+NO. 11 层: 
+NO. 12 层: 
+NO. 13 层: 
+NO. 14 层: 16384 
+P0,P1_3 PAGES:
+显示空闲链表数组:
+NO. 0 层: 
+NO. 1 层: 
+NO. 2 层: 
+NO. 3 层: 8 
+NO. 4 层: 16 
+NO. 5 层: 32 
+NO. 6 层: 64 
+NO. 7 层: 128 
+NO. 8 层: 256 
+NO. 9 层: 512 
+NO. 10 层: 1024 
+NO. 11 层: 2048 
+NO. 12 层: 4096 
+NO. 13 层: 8192 
+NO. 14 层: 
+FREE_P0,P1:
+显示空闲链表数组:
+NO. 0 层: 
+NO. 1 层: 
+NO. 2 层: 
+NO. 3 层: 
+NO. 4 层: 
+NO. 5 层: 
+NO. 6 层: 
+NO. 7 层: 
+NO. 8 层: 
+NO. 9 层: 
+NO. 10 层: 
+NO. 11 层: 
+NO. 12 层: 
+NO. 13 层: 
+NO. 14 层: 16384 
+ALLOC_P0_4 PAGES:
+显示空闲链表数组:
+NO. 0 层: 
+NO. 1 层: 
+NO. 2 层: 4 
+NO. 3 层: 8 
+NO. 4 层: 16 
+NO. 5 层: 32 
+NO. 6 层: 64 
+NO. 7 层: 128 
+NO. 8 层: 256 
+NO. 9 层: 512 
+NO. 10 层: 1024 
+NO. 11 层: 2048 
+NO. 12 层: 4096 
+NO. 13 层: 8192 
+NO. 14 层: 
+ALLOC_P1_2 PAGES:
+显示空闲链表数组:
+NO. 0 层: 
+NO. 1 层: 2 
+NO. 2 层: 
+NO. 3 层: 8 
+NO. 4 层: 16 
+NO. 5 层: 32 
+NO. 6 层: 64 
+NO. 7 层: 128 
+NO. 8 层: 256 
+NO. 9 层: 512 
+NO. 10 层: 1024 
+NO. 11 层: 2048 
+NO. 12 层: 4096 
+NO. 13 层: 8192 
+NO. 14 层: 
+ALLOC_P1_1 PAGE:
+显示空闲链表数组:
+NO. 0 层: 1 
+NO. 1 层: 
+NO. 2 层: 
+NO. 3 层: 8 
+NO. 4 层: 16 
+NO. 5 层: 32 
+NO. 6 层: 64 
+NO. 7 层: 128 
+NO. 8 层: 256 
+NO. 9 层: 512 
+NO. 10 层: 1024 
+NO. 11 层: 2048 
+NO. 12 层: 4096 
+NO. 13 层: 8192 
+NO. 14 层: 
+FREE:
+显示空闲链表数组:
+NO. 0 层: 
+NO. 1 层: 
+NO. 2 层: 
+NO. 3 层: 
+NO. 4 层: 
+NO. 5 层: 
+NO. 6 层: 
+NO. 7 层: 
+NO. 8 层: 
+NO. 9 层: 
+NO. 10 层: 
+NO. 11 层: 
+NO. 12 层: 
+NO. 13 层: 
+NO. 14 层: 16384 
+check_alloc_page() succeeded!
+satp virtual address: 0xffffffffc0205000
+satp physical address: 0x0000000080205000
+++ setup timer interrupts
+100 ticks
+100 ticks
+100 ticks
+100 ticks

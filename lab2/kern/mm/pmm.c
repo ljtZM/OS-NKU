@@ -1,6 +1,5 @@
 #include <default_pmm.h>
 #include <best_fit_pmm.h>
-#include <buddy_sys_pmm.h>
 #include <defs.h>
 #include <error.h>
 #include <memlayout.h>
@@ -11,6 +10,11 @@
 #include <string.h>
 #include <../sync/sync.h>
 #include <riscv.h>
+// 引入伙伴系统内存管理器的头文件
+#include <buddy_sys_pmm.h>
+
+
+// 其余代码保持不变，确保伙伴系统在物理内存管理的基础上能够正常初始化和使用
 
 // virtual address of physical page array
 struct Page *pages;
@@ -30,6 +34,8 @@ uintptr_t satp_physical;
 // physical memory management
 const struct pmm_manager *pmm_manager;
 
+//update the kind of fppn
+size_t fppn;
 
 static void check_alloc_page(void);
 
@@ -40,6 +46,15 @@ static void init_pmm_manager(void) {
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
 }
+
+
+//  // 初始化物理内存管理器，使用伙伴系统
+//  static void init_pmm_manager(void) {
+//      pmm_manager = &buddy_pmm_manager;  // 修改为使用伙伴系统内存管理器
+//      cprintf("memory management: %s\n", pmm_manager->name);
+//      pmm_manager->init();
+//  }
+
 
 // init_memmap - call pmm->init_memmap to build Page struct for free memory
 static void init_memmap(struct Page *base, size_t n) {
@@ -115,6 +130,8 @@ static void page_init(void) {
     mem_end = ROUNDDOWN(mem_end, PGSIZE);
     if (freemem < mem_end) {
         init_memmap(pa2page(mem_begin), (mem_end - mem_begin) / PGSIZE);
+        //add: define of fppn
+        fppn=pa2page(mem_begin)-pages+nbase;
     }
 }
 
