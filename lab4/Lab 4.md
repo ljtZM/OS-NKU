@@ -165,7 +165,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 22……
+    //LAB4:EXERCISE2 2211819
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -398,6 +398,25 @@ void proc_run(struct proc_struct *proc) {
 **问题2**：编译并运行代码的结果输出如下所示:
 
 ```
+(THU.CST) os is loading ...
+
+Special kernel symbols:
+  entry  0xc0200032 (virtual)
+  etext  0xc0204f4a (virtual)
+  edata  0xc020b060 (virtual)
+  end    0xc02165cc (virtual)
+
+...
+
+++ setup timer interrupts
+this initproc, pid = 1, name = "init"
+To U: "Hello world!!".
+To U: "en.., Bye, Bye. :)"
+kernel panic at kern/process/proc.c:374:
+    process exit!!.
+
+Welcome to the kernel debug monitor!!
+Type 'help' for a list of commands.
 
 ```
 
